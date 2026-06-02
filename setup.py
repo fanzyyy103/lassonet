@@ -27,6 +27,7 @@ setup(
     install_requires=[
         "torch >= 1.11",
         "scikit-learn",
+        "scipy",
         "matplotlib",
         "sortedcontainers",
         "tqdm",

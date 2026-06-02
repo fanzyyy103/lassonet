@@ -56,6 +56,8 @@ class HistoryItem:
 
 
 class BaseLassoNet(BaseEstimator, metaclass=ABCMeta):
+    _supports_offset = False
+
     def __init__(
         self,
         *,
@@ -66,6 +68,7 @@ class BaseLassoNet(BaseEstimator, metaclass=ABCMeta):
         gamma_skip=0.0,
         path_multiplier=1.02,
         M=10,
+        penalty_factor=None,
         groups=None,
         dropout=0,
         batch_size=None,
@@ -101,6 +104,11 @@ class BaseLassoNet(BaseEstimator, metaclass=ABCMeta):
             the penalty parameter over the path
         M : float, default=10.0
             Hierarchy parameter.
+        penalty_factor : array-like of shape (n_features,), default=None
+            Optional nonnegative feature-wise penalty multipliers for the
+            skip-layer L1 penalty. This enables a weighted LassoNet /
+            pretrained LassoNet extension. If None, an all-ones vector is used
+            and the estimator behaves exactly like the original LassoNet.
         groups : None or list of lists
             Use group LassoNet regularization.
             `groups` is a list of list such that `groups[i]`
@@ -144,6 +152,7 @@ class BaseLassoNet(BaseEstimator, metaclass=ABCMeta):
         self.gamma_skip = gamma_skip
         self.path_multiplier = path_multiplier
         self.M = M
+        self.penalty_factor = penalty_factor
         self.groups = groups
         self.dropout = dropout
         self.batch_size = batch_size
@@ -182,6 +191,7 @@ class BaseLassoNet(BaseEstimator, metaclass=ABCMeta):
         self.torch_seed = torch_seed
 
         self.model = None
+        self.penalty_factor_ = None
 
     @abstractmethod
     def _convert_y(self, y) -> torch.TensorType:
@@ -196,6 +206,51 @@ class BaseLassoNet(BaseEstimator, metaclass=ABCMeta):
     @abstractattr
     def criterion(cls):
         raise NotImplementedError
+
+    def _validate_penalty_factor(self, n_features):
+        if self.penalty_factor is None:
+            penalty_factor = np.ones(n_features, dtype=np.float32)
+        else:
+            if torch.is_tensor(self.penalty_factor):
+                penalty_factor = self.penalty_factor.detach().cpu().numpy()
+            else:
+                penalty_factor = np.asarray(self.penalty_factor)
+            penalty_factor = penalty_factor.astype(np.float32, copy=False)
+            if penalty_factor.ndim != 1 or penalty_factor.shape[0] != n_features:
+                raise ValueError(
+                    "`penalty_factor` must be a 1D array-like object of length n_features."
+                )
+            if np.any(penalty_factor < 0):
+                raise ValueError("`penalty_factor` entries must be nonnegative.")
+        self.penalty_factor_ = torch.as_tensor(
+            penalty_factor,
+            dtype=torch.float32,
+            device=self.device,
+        )
+
+    @staticmethod
+    def _normalize_offset(offset, y):
+        if torch.is_tensor(offset):
+            offset = offset.detach().cpu().numpy()
+        if hasattr(offset, "to_numpy"):
+            offset = offset.to_numpy()
+        offset = np.asarray(offset)
+        y = np.asarray(y)
+        if offset.shape == y.shape:
+            return offset
+        if y.ndim == 1 and offset.ndim == 2 and offset.shape == (len(y), 1):
+            return offset.reshape(-1)
+        if y.ndim == 2 and y.shape[1] == 1 and offset.ndim == 1 and len(offset) == len(y):
+            return offset.reshape(-1, 1)
+        raise ValueError("`offset` must have the same shape as `y`.")
+
+    def _cast_offset(self, offset, y):
+        offset = torch.as_tensor(offset, dtype=y.dtype, device=self.device)
+        if offset.shape == y.shape:
+            return offset
+        if len(y.shape) == 2 and y.shape[1] == 1 and offset.shape == (len(y),):
+            return offset.view(-1, 1)
+        raise ValueError("`offset` must have the same shape as `y` after conversion.")
 
     def _init_model(self, X, y):
         """Create a torch model"""
@@ -221,7 +276,17 @@ class BaseLassoNet(BaseEstimator, metaclass=ABCMeta):
         y = self._convert_y(y)
         return X, y
 
-    def fit(self, X, y, *, X_val=None, y_val=None, dense_only=False):
+    def fit(
+        self,
+        X,
+        y,
+        *,
+        X_val=None,
+        y_val=None,
+        offset=None,
+        offset_val=None,
+        dense_only=False,
+    ):
         """Train the model.
         Note that if `lambda_` is not given, the trained model
         will most likely not use any feature.
@@ -233,6 +298,8 @@ class BaseLassoNet(BaseEstimator, metaclass=ABCMeta):
             y,
             X_val=X_val,
             y_val=y_val,
+            offset=offset,
+            offset_val=offset_val,
             return_state_dicts=False,
             lambda_seq=lambda_seq,
         )
@@ -258,7 +325,8 @@ class BaseLassoNet(BaseEstimator, metaclass=ABCMeta):
             with torch.no_grad():
                 return (
                     self.criterion(model(X_val), y_val).item()
-                    + lambda_ * model.l1_regularization_skip().item()
+                    + lambda_
+                    * model.l1_regularization_skip(self.penalty_factor_).item()
                     + self.gamma * model.l2_regularization().item()
                     + self.gamma_skip * model.l2_regularization_skip().item()
                 )
@@ -318,6 +386,7 @@ class BaseLassoNet(BaseEstimator, metaclass=ABCMeta):
                 model.prox(
                     lambda_=lambda_ * optimizer.param_groups[0]["lr"],
                     M=self.M,
+                    penalty_factor=self.penalty_factor_,
                 )
 
             if epoch == 0:
@@ -345,7 +414,7 @@ class BaseLassoNet(BaseEstimator, metaclass=ABCMeta):
         else:
             n_iters = epoch + 1
         with torch.no_grad():
-            reg = self.model.l1_regularization_skip().item()
+            reg = self.model.l1_regularization_skip(self.penalty_factor_).item()
             l2_regularization = self.model.l2_regularization()
             l2_regularization_skip = self.model.l2_regularization_skip()
         return HistoryItem(
@@ -373,6 +442,8 @@ class BaseLassoNet(BaseEstimator, metaclass=ABCMeta):
         *,
         X_val=None,
         y_val=None,
+        offset=None,
+        offset_val=None,
         lambda_seq=None,
         lambda_max=float("inf"),
         return_state_dicts=False,
@@ -390,17 +461,47 @@ class BaseLassoNet(BaseEstimator, metaclass=ABCMeta):
         assert (X_val is None) == (
             y_val is None
         ), "You must specify both or none of X_val and y_val"
+        if offset is not None and not self._supports_offset:
+            raise ValueError("`offset` is only supported for regression models.")
+        if offset is not None:
+            offset = self._normalize_offset(offset, y)
+        if offset_val is not None:
+            if not self._supports_offset:
+                raise ValueError("`offset_val` is only supported for regression models.")
+            if y_val is None:
+                raise ValueError("`offset_val` requires explicit validation targets `y_val`.")
+            offset_val = self._normalize_offset(offset_val, y_val)
         sample_val = self.val_size != 0 and X_val is None
         if sample_val:
-            X_train, X_val, y_train, y_val = train_test_split(
-                X, y, test_size=self.val_size, random_state=self.random_state
+            split_items = [X, y]
+            if offset is not None:
+                split_items.append(offset)
+            split = train_test_split(
+                *split_items,
+                test_size=self.val_size,
+                random_state=self.random_state,
             )
+            X_train, X_val, y_train, y_val = split[:4]
+            if offset is not None:
+                offset_train, offset_val = split[4:6]
+            else:
+                offset_train = offset_val = None
         elif X_val is None:
             X_train, y_train = X_val, y_val = X, y
+            offset_train = offset_val = offset
         else:
             X_train, y_train = X, y
+            offset_train = offset
+            if offset is not None and offset_val is None:
+                raise ValueError(
+                    "When using explicit validation data with `offset`, you must also pass `offset_val`."
+                )
         X_train, y_train = self._cast_input(X_train, y_train)
         X_val, y_val = self._cast_input(X_val, y_val)
+        self._validate_penalty_factor(X_train.shape[1])
+        if offset_train is not None:
+            y_train = y_train - self._cast_offset(offset_train, y_train)
+            y_val = y_val - self._cast_offset(offset_val, y_val)
 
         hist: List[HistoryItem] = []
 
@@ -444,7 +545,7 @@ class BaseLassoNet(BaseEstimator, metaclass=ABCMeta):
             if self.lambda_start == "auto":
                 # divide by 10 for initial training
                 self.lambda_start_ = (
-                    self.model.lambda_start(M=self.M)
+                    self.model.lambda_start(M=self.M, penalty_factor=self.penalty_factor_)
                     / optimizer.param_groups[0]["lr"]
                     / 10
                 )
@@ -454,7 +555,12 @@ class BaseLassoNet(BaseEstimator, metaclass=ABCMeta):
             else:
                 lambda_seq = _lambda_seq(self.lambda_start)
 
-        if not lambda_seq:
+        if lambda_seq is None:
+            lambda_seq = []
+        else:
+            lambda_seq = list(lambda_seq)
+
+        if len(lambda_seq) == 0:
             # support lambda_seq=[] to only train the dense model
             return hist
 
@@ -628,6 +734,8 @@ class LassoNetRegressor(
     BaseLassoNet,
 ):
     """Use LassoNet as regressor"""
+
+    _supports_offset = True
 
     def _convert_y(self, y):
         y = torch.FloatTensor(y).to(self.device)

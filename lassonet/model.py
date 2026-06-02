@@ -7,6 +7,23 @@ from torch.nn import functional as F
 from .prox import inplace_group_prox, inplace_prox, prox
 
 
+def _apply_penalty_factor(lambda_, penalty_factor, *, ref):
+    """
+    Convert a scalar path value lambda into per-feature thresholds
+    lambda_j = lambda * penalty_factor[j].
+
+    When penalty_factor is None, this is exactly the original LassoNet behavior.
+    """
+    if penalty_factor is None:
+        return lambda_
+    if torch.is_tensor(lambda_):
+        lambda_tensor = lambda_.to(device=ref.device, dtype=ref.dtype)
+    else:
+        lambda_tensor = torch.as_tensor(lambda_, device=ref.device, dtype=ref.dtype)
+    penalty_factor = penalty_factor.to(device=ref.device, dtype=ref.dtype)
+    return lambda_tensor * penalty_factor
+
+
 class LassoNet(nn.Module):
     def __init__(self, *dims, groups=None, dropout=None):
         """
@@ -48,13 +65,18 @@ class LassoNet(nn.Module):
                 current_layer = F.relu(current_layer)
         return result + current_layer
 
-    def prox(self, *, lambda_, lambda_bar=0, M=1):
+    def prox(self, *, lambda_, lambda_bar=0, M=1, penalty_factor=None):
+        weighted_lambda = _apply_penalty_factor(
+            lambda_,
+            penalty_factor,
+            ref=self.skip.weight.data,
+        )
         if self.groups is None:
             with torch.no_grad():
                 inplace_prox(
                     beta=self.skip,
                     theta=self.layers[0],
-                    lambda_=lambda_,
+                    lambda_=weighted_lambda,
                     lambda_bar=lambda_bar,
                     M=M,
                 )
@@ -64,7 +86,7 @@ class LassoNet(nn.Module):
                     groups=self.groups,
                     beta=self.skip,
                     theta=self.layers[0],
-                    lambda_=lambda_,
+                    lambda_=weighted_lambda,
                     lambda_bar=lambda_bar,
                     M=M,
                 )
@@ -74,6 +96,7 @@ class LassoNet(nn.Module):
         M=1,
         lambda_bar=0,
         factor=2,
+        penalty_factor=None,
     ):
         """Estimate when the model will start to sparsify."""
 
@@ -81,12 +104,17 @@ class LassoNet(nn.Module):
             with torch.no_grad():
                 beta = self.skip.weight.data
                 theta = self.layers[0].weight.data
+                weighted_lambda = _apply_penalty_factor(
+                    lambda_,
+                    penalty_factor,
+                    ref=beta,
+                )
 
                 for _ in range(10000):
                     new_beta, theta = prox(
                         beta,
                         theta,
-                        lambda_=lambda_,
+                        lambda_=weighted_lambda,
                         lambda_bar=lambda_bar,
                         M=M,
                     )
@@ -116,8 +144,15 @@ class LassoNet(nn.Module):
             )
         return ans
 
-    def l1_regularization_skip(self):
-        return torch.norm(self.skip.weight.data, p=2, dim=0).sum()
+    def l1_regularization_skip(self, penalty_factor=None):
+        regularization = torch.norm(self.skip.weight.data, p=2, dim=0)
+        if penalty_factor is None:
+            return regularization.sum()
+        penalty_factor = penalty_factor.to(
+            device=self.skip.weight.data.device,
+            dtype=self.skip.weight.data.dtype,
+        )
+        return torch.sum(regularization * penalty_factor)
 
     def l2_regularization_skip(self):
         return torch.norm(self.skip.weight.data, p=2)
