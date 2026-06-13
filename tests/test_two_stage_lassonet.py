@@ -1,8 +1,12 @@
 import unittest
 
 import numpy as np
+from lassonet import LassoNetRegressor as Stage1LassoNetRegressor
 
-from twostage_lassonet import TwoStagePretrainedLassoNetRegressor
+from twostage_lassonet import (
+    TwoStagePretrainedLassoNetRegressor,
+    extract_stage1_artifacts,
+)
 
 
 class TwoStageLassoNetTests(unittest.TestCase):
@@ -84,6 +88,56 @@ class TwoStageLassoNetTests(unittest.TestCase):
         self.assertTrue(np.all(np.isin(group1_final, np.arange(p))))
         self.assertTrue(set(common_support).issubset(set(group0_final)))
         self.assertTrue(set(common_support).issubset(set(group1_final)))
+
+    def test_can_reuse_external_stage1_model(self):
+        rng = np.random.default_rng(1234)
+        n_per_group = 30
+        p = 5
+        X = rng.normal(size=(2 * n_per_group, p)).astype(np.float32)
+        groups = np.array([0] * n_per_group + [1] * n_per_group)
+        y = (
+            1.8 * X[:, 0]
+            - 1.2 * X[:, 1]
+            + (groups == 0) * 1.5 * X[:, 2]
+            + (groups == 1) * 1.5 * X[:, 3]
+        ).astype(np.float32)
+
+        stage1_model = Stage1LassoNetRegressor(
+            hidden_dims=(6,),
+            lambda_seq=[1e-2],
+            M=10.0,
+            n_iters=(20, 10),
+            patience=(5, 4),
+            verbose=0,
+            random_state=1234,
+            torch_seed=1234,
+        )
+        stage1_model.fit(X, y)
+
+        artifacts = extract_stage1_artifacts(stage1_model, X, alpha=0.5)
+        self.assertEqual(artifacts["offset"].shape, y.shape)
+        self.assertEqual(artifacts["common_support"].shape, (p,))
+
+        model = TwoStagePretrainedLassoNetRegressor(
+            alpha=0.5,
+            stage2_lambda=1e-2,
+            group_model_kwargs={
+                "hidden_dims": (6,),
+                "dense_epochs": 20,
+                "sparse_epochs": 10,
+                "dense_patience": 5,
+                "sparse_patience": 4,
+                "random_state": 1234,
+                "torch_seed": 1234,
+                "verbose": 0,
+            },
+        )
+        model.fit(X, y, groups, stage1_model=stage1_model)
+
+        predictions = model.predict(X, groups)
+        self.assertEqual(predictions.shape, y.shape)
+        self.assertIn(0, model.group_models_)
+        self.assertIn(1, model.group_models_)
 
 
 if __name__ == "__main__":
