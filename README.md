@@ -63,6 +63,20 @@ print("group 0 final support:", model.get_group_final_support(0))
 print("group 1 final support:", model.get_group_final_support(1))
 ```
 
+For a ptLasso-oriented interpretation layer that separates:
+
+- stage-1 common support
+- stage-2 group correction support
+- strict group-only support
+
+use:
+
+```python
+from twostage_lassonet import PTLassoOrientedTwoStageLassoNetRegressor
+```
+
+See [PTLASSO_ORIENTED_README.md](PTLASSO_ORIENTED_README.md) for details.
+
 ## Generate The Three Path Plots
 
 The repository also includes code to generate the three stacked plots:

@@ -1,5 +1,6 @@
 from .path import PathItem, fit_two_stage_lambda_path, mse_score
 from .plot import plot_path_summary
+from .ptlasso_oriented import PTLassoOrientedTwoStageLassoNetRegressor
 from .regression import HistoryItem, LassoNetRegressor
 from .two_stage import (
     TwoStagePretrainedLassoNetRegressor,
@@ -11,6 +12,7 @@ __all__ = [
     "HistoryItem",
     "LassoNetRegressor",
     "PathItem",
+    "PTLassoOrientedTwoStageLassoNetRegressor",
     "TwoStagePretrainedLassoNetRegressor",
     "extract_stage1_artifacts",
     "fit_two_stage_lambda_path",

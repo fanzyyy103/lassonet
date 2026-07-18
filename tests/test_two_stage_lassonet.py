@@ -4,6 +4,7 @@ import numpy as np
 from lassonet import LassoNetRegressor as Stage1LassoNetRegressor
 
 from twostage_lassonet import (
+    PTLassoOrientedTwoStageLassoNetRegressor,
     TwoStagePretrainedLassoNetRegressor,
     extract_stage1_artifacts,
 )
@@ -138,6 +139,88 @@ class TwoStageLassoNetTests(unittest.TestCase):
         self.assertEqual(predictions.shape, y.shape)
         self.assertIn(0, model.group_models_)
         self.assertIn(1, model.group_models_)
+
+    def test_ptlasso_oriented_summary_is_self_consistent(self):
+        rng = np.random.default_rng(4321)
+        n_per_group = 36
+        p = 6
+        X0 = rng.normal(size=(n_per_group, p)).astype(np.float32)
+        X1 = rng.normal(size=(n_per_group, p)).astype(np.float32)
+        X = np.vstack([X0, X1]).astype(np.float32)
+        groups = np.array([0] * n_per_group + [1] * n_per_group)
+
+        y = (
+            1.7 * X[:, 0]
+            - 1.1 * X[:, 1]
+            + (groups == 0) * 1.9 * X[:, 2]
+            + (groups == 1) * 1.9 * X[:, 3]
+            + 0.05 * rng.normal(size=2 * n_per_group)
+        ).astype(np.float32)
+
+        model = PTLassoOrientedTwoStageLassoNetRegressor(
+            alpha=0.5,
+            stage1_lambda=1e-2,
+            stage2_lambda=1e-2,
+            common_model_kwargs={
+                "hidden_dims": (8,),
+                "dense_epochs": 25,
+                "sparse_epochs": 15,
+                "dense_patience": 8,
+                "sparse_patience": 6,
+                "random_state": 4321,
+                "torch_seed": 4321,
+                "verbose": 0,
+            },
+            group_model_kwargs={
+                "hidden_dims": (8,),
+                "dense_epochs": 25,
+                "sparse_epochs": 15,
+                "dense_patience": 8,
+                "sparse_patience": 6,
+                "random_state": 4321,
+                "torch_seed": 4321,
+                "verbose": 0,
+            },
+        )
+
+        feature_names = [f"x{i}" for i in range(p)]
+        model.fit(X, y, groups, feature_names=feature_names)
+        components = model.predict_components(X, groups)
+
+        self.assertIn("group_correction", components)
+        self.assertEqual(components["group_correction"].shape, y.shape)
+
+        common = set(model.get_common_support().tolist())
+        summary = model.summarize_group_correction(0)
+        correction = set(model.get_group_correction_support(0).tolist())
+        reused = set(model.get_group_common_reused_support(0).tolist())
+        strict = set(model.get_group_strict_specific_support(0).tolist())
+        final_union = set(model.get_group_final_support(0).tolist())
+
+        self.assertEqual(reused, correction & common)
+        self.assertEqual(strict, correction - common)
+        self.assertEqual(final_union, correction | common)
+        self.assertEqual(summary["common_feature_count"], len(common))
+        self.assertEqual(summary["group_correction_feature_count"], len(correction))
+        self.assertEqual(summary["strict_group_only_count"], len(strict))
+        self.assertEqual(summary["common_reused_count"], len(reused))
+        self.assertEqual(summary["final_union_count"], len(final_union))
+
+        structure = model.describe_ptlasso_structure()
+        self.assertEqual(structure["common_feature_count"], len(common))
+        self.assertIn(0, structure["groups"])
+
+        importance_rows = model.get_group_correction_importance(0)
+        self.assertEqual(len(importance_rows), p)
+        self.assertGreaterEqual(
+            importance_rows[0]["skip_importance"],
+            importance_rows[-1]["skip_importance"],
+        )
+
+        role_rows = model.summarize_feature_roles()
+        self.assertTrue(any(row["role"] == "common_only" for row in role_rows) or any(
+            row["role"] == "common_and_group_corrected" for row in role_rows
+        ))
 
 
 if __name__ == "__main__":
