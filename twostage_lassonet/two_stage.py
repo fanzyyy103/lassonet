@@ -53,15 +53,26 @@ def _build_penalty_factor(alpha, common_support):
 
 
 def _selected_mask_from_stage1_model(stage1_model):
-    if getattr(stage1_model, "model", None) is None:
-        raise ValueError("stage1_model must be fitted before extracting support information.")
-    return (
-        stage1_model.model.input_mask()
-        .detach()
-        .cpu()
-        .numpy()
-        .astype(bool)
-    )
+    return _selected_mask_from_model(stage1_model)
+
+
+def _selected_mask_from_model(model):
+    """Read a support mask from either our estimator or official LassoNet CV."""
+    if hasattr(model, "selected_mask"):
+        selected = model.selected_mask()
+    elif getattr(model, "best_selected_", None) is not None:
+        selected = model.best_selected_
+    elif getattr(model, "model", None) is not None:
+        selected = model.model.input_mask()
+    else:
+        raise ValueError("The LassoNet model must be fitted before extracting support information.")
+
+    if torch.is_tensor(selected):
+        selected = selected.detach().cpu().numpy()
+    selected = np.asarray(selected, dtype=bool)
+    if selected.ndim != 1:
+        raise ValueError("Expected a one-dimensional feature support mask.")
+    return selected
 
 
 def _build_optimizers(learning_rate, path_learning_rate, momentum):
@@ -422,12 +433,12 @@ class TwoStagePretrainedLassoNetRegressor:
         return np.flatnonzero(self.common_support_)
 
     def get_group_support(self, group):
-        return np.flatnonzero(self.group_models_[group].selected_mask())
+        return np.flatnonzero(_selected_mask_from_model(self.group_models_[group]))
 
     def get_group_individual_support(self, group):
-        group_support = self.group_models_[group].selected_mask()
+        group_support = _selected_mask_from_model(self.group_models_[group])
         return np.flatnonzero(group_support & ~self.common_support_)
 
     def get_group_final_support(self, group):
-        group_support = self.group_models_[group].selected_mask()
+        group_support = _selected_mask_from_model(self.group_models_[group])
         return np.flatnonzero(group_support | self.common_support_)

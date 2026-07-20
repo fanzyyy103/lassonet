@@ -5,7 +5,9 @@ from lassonet import LassoNetRegressor as Stage1LassoNetRegressor
 
 from twostage_lassonet import (
     PTLassoOrientedTwoStageLassoNetRegressor,
+    PTLassoOrientedTwoStageLassoNetRegressorCV,
     TwoStagePretrainedLassoNetRegressor,
+    LassoNetRegressor,
     extract_stage1_artifacts,
 )
 
@@ -193,15 +195,18 @@ class TwoStageLassoNetTests(unittest.TestCase):
         common = set(model.get_common_support().tolist())
         summary = model.summarize_group_correction(0)
         correction = set(model.get_group_correction_support(0).tolist())
+        component = set(model.get_group_specific_component_support(0).tolist())
         reused = set(model.get_group_common_reused_support(0).tolist())
         strict = set(model.get_group_strict_specific_support(0).tolist())
         final_union = set(model.get_group_final_support(0).tolist())
 
+        self.assertEqual(component, correction)
         self.assertEqual(reused, correction & common)
         self.assertEqual(strict, correction - common)
         self.assertEqual(final_union, correction | common)
         self.assertEqual(summary["common_feature_count"], len(common))
         self.assertEqual(summary["group_correction_feature_count"], len(correction))
+        self.assertEqual(summary["group_specific_component_feature_count"], len(correction))
         self.assertEqual(summary["strict_group_only_count"], len(strict))
         self.assertEqual(summary["common_reused_count"], len(reused))
         self.assertEqual(summary["final_union_count"], len(final_union))
@@ -209,6 +214,23 @@ class TwoStageLassoNetTests(unittest.TestCase):
         structure = model.describe_ptlasso_structure()
         self.assertEqual(structure["common_feature_count"], len(common))
         self.assertIn(0, structure["groups"])
+        self.assertIn("pretrained_overlap", structure)
+
+        component_summary = model.summarize_group_specific_component(0)
+        self.assertEqual(
+            component_summary["group_specific_component_feature_count"],
+            len(correction),
+        )
+
+        overlap = model.summarize_pretrained_overlap()
+        self.assertIn("pretrained_common_count", overlap)
+        self.assertIn(0, overlap["groups"])
+        self.assertIn("pretrained_individual_count", overlap["groups"][0])
+
+        pretrained_common = set(model.get_pretrained_common_support().tolist())
+        pretrained_final_group0 = set(model.get_group_pretrained_final_support(0).tolist())
+        pretrained_individual_group0 = set(model.get_group_pretrained_individual_support(0).tolist())
+        self.assertEqual(pretrained_individual_group0, pretrained_final_group0 - pretrained_common)
 
         importance_rows = model.get_group_correction_importance(0)
         self.assertEqual(len(importance_rows), p)
@@ -221,6 +243,119 @@ class TwoStageLassoNetTests(unittest.TestCase):
         self.assertTrue(any(row["role"] == "common_only" for row in role_rows) or any(
             row["role"] == "common_and_group_corrected" for row in role_rows
         ))
+
+    def test_skip_only_stage2_keeps_hidden_layers_zero(self):
+        rng = np.random.default_rng(2468)
+        X = rng.normal(size=(80, 5)).astype(np.float32)
+        y = (1.5 * X[:, 0] - 2.0 * X[:, 2] + 0.1 * rng.normal(size=80)).astype(np.float32)
+
+        model = LassoNetRegressor(
+            hidden_dims=(6,),
+            skip_only=True,
+            dense_epochs=15,
+            sparse_epochs=10,
+            dense_patience=5,
+            sparse_patience=4,
+            random_state=2468,
+            torch_seed=2468,
+            verbose=0,
+        )
+        model.fit(X, y, lambda_=10.0)
+
+        for layer in model.model.layers:
+            self.assertTrue(np.allclose(layer.weight.detach().cpu().numpy(), 0.0))
+            self.assertTrue(np.allclose(layer.bias.detach().cpu().numpy(), 0.0))
+
+    def test_official_cv_two_stage_selects_alpha_and_both_stage_lambdas(self):
+        rng = np.random.default_rng(9753)
+        n_per_group = 24
+        p = 5
+        X = rng.normal(size=(2 * n_per_group, p)).astype(np.float32)
+        groups = np.array([0] * n_per_group + [1] * n_per_group)
+        y = (
+            1.6 * X[:, 0]
+            - 1.1 * X[:, 1]
+            + (groups == 0) * 1.8 * X[:, 2]
+            + (groups == 1) * 1.8 * X[:, 3]
+            + 0.05 * rng.normal(size=2 * n_per_group)
+        ).astype(np.float32)
+
+        cv_kwargs = {
+            "hidden_dims": (4,),
+            "lambda_seq": [0.01, 0.1, 1.0],
+            "path_multiplier": 2.0,
+            "n_iters": (6, 4),
+            "patience": (3, 2),
+            "val_size": 0,
+            "verbose": 0,
+            "random_state": 9753,
+            "torch_seed": 9753,
+        }
+        model = PTLassoOrientedTwoStageLassoNetRegressorCV(
+            alpha_grid=(0.5,),
+            alpha_cv=2,
+            stage1_cv=2,
+            stage2_cv=2,
+            common_model_kwargs=cv_kwargs,
+            group_model_kwargs=cv_kwargs,
+            random_state=9753,
+            verbose=0,
+        )
+        model.fit(X, y, groups, feature_names=[f"x{i}" for i in range(p)])
+
+        predictions = model.predict(X, groups)
+        self.assertEqual(predictions.shape, y.shape)
+        self.assertEqual(model.best_alpha_, 0.5)
+        self.assertIsInstance(model.best_stage1_lambda_, float)
+        self.assertEqual(set(model.best_stage2_lambda_by_group_), {0, 1})
+        self.assertEqual(len(model.alpha_cv_results_), 1)
+        self.assertEqual(len(model.alpha_cv_details_), 2)
+        alpha_result = model.alpha_cv_results_[0]
+        detail_mses = [
+            row["validation_mse"] for row in model.alpha_cv_details_
+        ]
+        self.assertIn("mean_fold_mse", alpha_result)
+        self.assertNotIn("pooled_oof_mse", alpha_result)
+        self.assertAlmostEqual(alpha_result["mean_fold_mse"], np.mean(detail_mses))
+        self.assertEqual(alpha_result["n_folds"], 2)
+        self.assertEqual(model.get_feature_names().tolist(), [f"x{i}" for i in range(p)])
+
+    def test_official_cv_alpha_zero_uses_only_stage1_support(self):
+        rng = np.random.default_rng(8642)
+        X = rng.normal(size=(32, 4)).astype(np.float32)
+        y = (1.5 * X[:, 0] - 0.8 * X[:, 2]).astype(np.float32)
+        common_support = np.array([True, False, True, False])
+
+        cv_kwargs = {
+            "hidden_dims": (4,),
+            "lambda_seq": [0.01, 0.1],
+            "n_iters": (5, 3),
+            "patience": (2, 2),
+            "val_size": 0,
+            "verbose": 0,
+            "random_state": 8642,
+            "torch_seed": 8642,
+        }
+        model = PTLassoOrientedTwoStageLassoNetRegressorCV(
+            alpha_grid=(0.0,),
+            alpha_cv=2,
+            stage1_cv=2,
+            stage2_cv=2,
+            group_model_kwargs=cv_kwargs,
+            random_state=8642,
+            verbose=0,
+        )
+
+        stage2_model = model._fit_stage2_group(
+            X,
+            y,
+            np.zeros_like(y),
+            common_support,
+            alpha=0.0,
+        )
+
+        np.testing.assert_array_equal(stage2_model.feature_indices, np.array([0, 2]))
+        self.assertFalse(stage2_model.selected_mask()[~common_support].any())
 
 
 if __name__ == "__main__":

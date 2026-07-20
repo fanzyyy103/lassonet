@@ -54,6 +54,7 @@ class LassoNetRegressor:
         self,
         *,
         hidden_dims=(100,),
+        skip_only=False,
         dropout=None,
         M=10.0,
         batch_size=None,
@@ -73,6 +74,7 @@ class LassoNetRegressor:
         random_state=None,
     ):
         self.hidden_dims = hidden_dims
+        self.skip_only = bool(skip_only)
         self.dropout = dropout
         self.M = M
         self.batch_size = batch_size
@@ -115,6 +117,7 @@ class LassoNetRegressor:
             *self.hidden_dims,
             output_dim,
             dropout=self.dropout,
+            skip_only=self.skip_only,
         ).to(self.device)
 
     def _cast_input(self, X, y=None):

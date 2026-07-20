@@ -158,3 +158,44 @@ When reporting grouped experiments, it is helpful to distinguish:
 
 This is usually more faithful to the ptLasso idea than reporting only
 `stage2_support - stage1_support`.
+
+## Official CV In Both Stages
+
+Use `PTLassoOrientedTwoStageLassoNetRegressorCV` when both stages should use
+the official LassoNet cross-validation workflow:
+
+```python
+from twostage_lassonet import PTLassoOrientedTwoStageLassoNetRegressorCV
+
+model = PTLassoOrientedTwoStageLassoNetRegressorCV(
+    alpha_grid=(0.0, 0.25, 0.5, 0.75, 1.0),
+    alpha_cv=3,
+    stage1_cv=5,
+    stage2_cv=5,
+    common_model_kwargs={
+        "hidden_dims": (10, 10),
+        "lambda_start": "auto",
+        "path_multiplier": 1.01,
+    },
+    group_model_kwargs={
+        "hidden_dims": (10, 10),
+        "lambda_start": "auto",
+        "path_multiplier": 1.01,
+    },
+)
+model.fit(X_train, y_train, groups_train, feature_names=feature_names)
+```
+
+The tuning layers are nested:
+
+1. The outer stratified folds select `alpha` from the unweighted mean of the
+   validation MSE values across folds.
+2. Every Stage 1 fit uses `LassoNetRegressorCV` to select its own lambda.
+3. Every group-specific Stage 2 fit uses `LassoNetRegressorCV` to select its
+   own lambda on the residual target.
+4. After alpha selection, both stages are refitted on all development data.
+
+Stage 2 is not independent of Stage 1. It uses the residual response
+`y - (1 - alpha) * f0(X)` and the Stage 1 support-based `penalty_factor`.
+The penalty factor extension is supplied by the local LassoNet fork; the
+upstream package currently does not expose weighted feature penalties.

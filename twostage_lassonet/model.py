@@ -6,20 +6,32 @@ from .prox import inplace_prox
 
 
 class LassoNet(nn.Module):
-    def __init__(self, *dims, dropout=None):
+    def __init__(self, *dims, dropout=None, skip_only=False):
         if len(dims) < 3:
             raise ValueError("LassoNet needs at least input, hidden, and output dims.")
 
         super().__init__()
+        self.skip_only = bool(skip_only)
         self.dropout = nn.Dropout(p=dropout) if dropout is not None else None
         self.layers = nn.ModuleList(
             [nn.Linear(dims[i], dims[i + 1]) for i in range(len(dims) - 1)]
         )
         self.skip = nn.Linear(dims[0], dims[-1], bias=False)
+        if self.skip_only:
+            self._zero_hidden_parameters()
+
+    def _zero_hidden_parameters(self):
+        for layer in self.layers:
+            layer.weight.data.zero_()
+            if layer.bias is not None:
+                layer.bias.data.zero_()
 
     def forward(self, inputs):
-        hidden = inputs
         result = self.skip(inputs)
+        if self.skip_only:
+            return result
+
+        hidden = inputs
         for layer in self.layers:
             hidden = layer(hidden)
             if layer is not self.layers[-1]:

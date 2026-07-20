@@ -1,6 +1,9 @@
 import numpy as np
 
-from .two_stage import TwoStagePretrainedLassoNetRegressor
+from .two_stage import (
+    TwoStagePretrainedLassoNetRegressor,
+    _selected_mask_from_model,
+)
 
 
 def _resolve_feature_names(feature_names, n_features):
@@ -17,10 +20,15 @@ def _resolve_feature_names(feature_names, n_features):
 
 
 def _selected_mask(model):
-    return np.asarray(model.selected_mask(), dtype=bool)
+    return _selected_mask_from_model(model)
 
 
 def _skip_importance(model):
+    if hasattr(model, "skip_importance"):
+        return np.asarray(model.skip_importance(), dtype=np.float64)
+
+    if getattr(model, "model", None) is None:
+        raise ValueError("The LassoNet model must be fitted before reading skip importance.")
     return (
         model.model.skip.weight.detach()
         .norm(p=2, dim=0)
@@ -32,20 +40,15 @@ def _skip_importance(model):
 
 class PTLassoOrientedTwoStageLassoNetRegressor(TwoStagePretrainedLassoNetRegressor):
     """
-    A ptLasso-oriented interface for the existing two-stage LassoNet estimator.
+    A ptLasso-oriented interface for the two-stage LassoNet estimator.
 
-    Training is unchanged:
-    - stage 1 learns a shared/common LassoNet on all samples;
-    - stage 2 learns one group-specific residual/correction model per group.
+    Stage 1 learns the common/shared support and Stage 2 learns a group-level
+    correction on the residual target. The ptLasso-oriented summaries expose:
 
-    The difference is interpretability:
-    - "common support" is the stage-1 support;
-    - "group correction support" is the active stage-2 support for a group;
-    - "strict group-only support" is stage-2 support minus the common support.
-
-    This matches the ptLasso intuition more closely because a feature may be
-    part of a group-specific correction even when it also appears in the
-    common/shared stage-1 support.
+    - the Stage-1 common support;
+    - the active Stage-2 correction support for each group;
+    - the strict group-only subset `S_k \\ S_common`;
+    - the final union `S_common ∪ S_k`.
     """
 
     def __init__(self, *args, **kwargs):
@@ -90,12 +93,65 @@ class PTLassoOrientedTwoStageLassoNetRegressor(TwoStagePretrainedLassoNetRegress
     def get_group_correction_support(self, group):
         return self.get_group_support(group)
 
+    def get_group_specific_component_support(self, group):
+        """
+        Return the active Stage-2 support for the group-specific correction.
+        """
+        return self.get_group_correction_support(group)
+
     def get_group_strict_specific_support(self, group):
         return self.get_group_individual_support(group)
 
     def get_group_common_reused_support(self, group):
         group_support = _selected_mask(self.group_models_[group])
         return np.flatnonzero(group_support & self.common_support_)
+
+    def get_group_pretrained_final_support(self, group):
+        """
+        Return the support of the final pretrained model for one group.
+
+        This is the ptLasso package-style support notion:
+        final(group) = common_stage1_support U group_specific_correction_support.
+        """
+        group_support = np.zeros_like(self.common_support_, dtype=bool)
+        group_support[self.get_group_specific_component_support(group)] = True
+        return np.flatnonzero(group_support | self.common_support_)
+
+    def get_pretrained_common_support(self):
+        """
+        Return features selected in every group's final pretrained model.
+
+        This matches the package-style notion of "pretrained common features":
+        the intersection of the final pretrained supports across groups.
+        """
+        if self.common_support_ is None:
+            raise RuntimeError("fit must be called before supports can be summarized.")
+        if self.group_order_ is None or len(self.group_order_) == 0:
+            return np.flatnonzero(self.common_support_)
+
+        intersection_mask = None
+        for group in self.group_order_:
+            final_mask = np.zeros_like(self.common_support_, dtype=bool)
+            final_mask[self.get_group_pretrained_final_support(group)] = True
+            if intersection_mask is None:
+                intersection_mask = final_mask
+            else:
+                intersection_mask &= final_mask
+
+        return np.flatnonzero(intersection_mask)
+
+    def get_group_pretrained_individual_support(self, group):
+        """
+        Return the ptLasso package-style group-specific support for one group.
+
+        These are features present in the group's final pretrained support after
+        removing the intersection support shared by every group's pretrained fit.
+        """
+        common_pretrained = np.zeros_like(self.common_support_, dtype=bool)
+        common_pretrained[self.get_pretrained_common_support()] = True
+        final_mask = np.zeros_like(self.common_support_, dtype=bool)
+        final_mask[self.get_group_pretrained_final_support(group)] = True
+        return np.flatnonzero(final_mask & ~common_pretrained)
 
     def get_feature_names(self):
         if self.common_support_ is None:
@@ -112,8 +168,8 @@ class PTLassoOrientedTwoStageLassoNetRegressor(TwoStagePretrainedLassoNetRegress
         )
         common_mask = np.asarray(self.common_support_, dtype=bool)
         correction_mask = _selected_mask(self.group_models_[group])
-        final_mask = common_mask | correction_mask
         strict_group_only_mask = correction_mask & ~common_mask
+        final_mask = common_mask | correction_mask
         common_reused_mask = correction_mask & common_mask
 
         return {
@@ -122,6 +178,8 @@ class PTLassoOrientedTwoStageLassoNetRegressor(TwoStagePretrainedLassoNetRegress
             "common_support_names": resolved_names[common_mask].tolist(),
             "group_correction_indices": np.flatnonzero(correction_mask),
             "group_correction_names": resolved_names[correction_mask].tolist(),
+            "group_specific_component_indices": np.flatnonzero(correction_mask),
+            "group_specific_component_names": resolved_names[correction_mask].tolist(),
             "strict_group_only_indices": np.flatnonzero(strict_group_only_mask),
             "strict_group_only_names": resolved_names[strict_group_only_mask].tolist(),
             "common_reused_indices": np.flatnonzero(common_reused_mask),
@@ -130,9 +188,60 @@ class PTLassoOrientedTwoStageLassoNetRegressor(TwoStagePretrainedLassoNetRegress
             "final_union_names": resolved_names[final_mask].tolist(),
             "common_feature_count": int(common_mask.sum()),
             "group_correction_feature_count": int(correction_mask.sum()),
+            "group_specific_component_feature_count": int(correction_mask.sum()),
             "strict_group_only_count": int(strict_group_only_mask.sum()),
             "common_reused_count": int(common_reused_mask.sum()),
             "final_union_count": int(final_mask.sum()),
+        }
+
+    def summarize_group_specific_component(self, group, *, feature_names=None):
+        return self.summarize_group_correction(group, feature_names=feature_names)
+
+    def summarize_pretrained_overlap(self, *, feature_names=None):
+        """
+        Summarize the final pretrained supports using the ptLasso package logic.
+
+        Common pretrained features are defined as the intersection of the final
+        pretrained supports across groups. Group-specific pretrained features
+        are the remaining features in each group's final pretrained support.
+        """
+        if self.common_support_ is None:
+            raise RuntimeError("fit must be called before supports can be summarized.")
+
+        resolved_names = _resolve_feature_names(
+            self.feature_names_ if feature_names is None else feature_names,
+            len(self.common_support_),
+        )
+        common_indices = self.get_pretrained_common_support()
+        common_mask = np.zeros_like(self.common_support_, dtype=bool)
+        common_mask[common_indices] = True
+
+        union_mask = np.zeros_like(self.common_support_, dtype=bool)
+        groups = {}
+        for group in self.group_order_:
+            final_indices = self.get_group_pretrained_final_support(group)
+            final_mask = np.zeros_like(self.common_support_, dtype=bool)
+            final_mask[final_indices] = True
+            individual_mask = final_mask & ~common_mask
+            union_mask |= final_mask
+
+            groups[group] = {
+                "pretrained_final_indices": final_indices.tolist(),
+                "pretrained_final_names": resolved_names[final_mask].tolist(),
+                "pretrained_final_count": int(final_mask.sum()),
+                "pretrained_individual_indices": np.flatnonzero(individual_mask).tolist(),
+                "pretrained_individual_names": resolved_names[individual_mask].tolist(),
+                "pretrained_individual_count": int(individual_mask.sum()),
+            }
+
+        return {
+            "pretrained_common_indices": common_indices.tolist(),
+            "pretrained_common_names": resolved_names[common_mask].tolist(),
+            "pretrained_common_count": int(common_mask.sum()),
+            "pretrained_union_indices": np.flatnonzero(union_mask).tolist(),
+            "pretrained_union_names": resolved_names[union_mask].tolist(),
+            "pretrained_union_count": int(union_mask.sum()),
+            "groups": groups,
         }
 
     def get_group_correction_importance(
@@ -239,6 +348,9 @@ class PTLassoOrientedTwoStageLassoNetRegressor(TwoStagePretrainedLassoNetRegress
             "common_support_indices": self.get_common_support().tolist(),
             "common_support_names": resolved_names[self.common_support_].tolist(),
             "common_feature_count": int(np.asarray(self.common_support_, dtype=bool).sum()),
+            "pretrained_overlap": self.summarize_pretrained_overlap(
+                feature_names=resolved_names,
+            ),
             "groups": {},
         }
 
