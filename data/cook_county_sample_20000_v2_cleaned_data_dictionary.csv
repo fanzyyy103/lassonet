@@ -1,0 +1,132 @@
+feature,dtype,role,description_if_available,missing_rate,n_unique,feature_group
+meta_sale_price,float64,target,Recorded sale price for the transaction.,0.0,3028,target
+meta_sale_count_past_n_years,float64,predictor,Count of previous sales in the configured historical window.,0.0,7,neighborhood
+meta_year,object,predictor,Cook County AVM input feature.,0.0,9,other
+meta_class,object,predictor,Cook County AVM input feature.,0.0,15,house_characteristic
+meta_township_name,object,predictor,Cook County AVM input feature.,0.0,38,location
+ind_pin_is_multicard,object,predictor,Property configuration indicator.,5.3398835905377265e-05,2,house_characteristic
+meta_pin_num_cards,float64,predictor,Cook County AVM input feature.,5.3398835905377265e-05,14,other
+hie_num_active,int32,predictor,Cook County AVM input feature.,0.0,3,house_characteristic
+meta_cdu,object,predictor,Cook County AVM input feature.,0.007689432370374326,5,house_characteristic
+loc_property_city,object,predictor,Location or environmental characteristic.,0.0,130,location
+loc_property_zip,object,predictor,Property ZIP code.,0.004966091739200085,166,location
+loc_longitude,float64,predictor,Property longitude.,0.0,18536,location
+loc_latitude,float64,predictor,Property latitude.,0.0,18536,location
+char_yrblt,float64,predictor,Year the structure was built.,5.3398835905377265e-05,164,house_characteristic
+char_bldg_sf,float64,predictor,Building square footage.,5.3398835905377265e-05,3569,house_characteristic
+char_land_sf,float64,predictor,Land square footage.,5.3398835905377265e-05,5754,house_characteristic
+char_beds,float64,predictor,Number of bedrooms.,0.00010679767181075453,17,house_characteristic
+char_rooms,float64,predictor,Number of rooms.,0.00010679767181075453,38,house_characteristic
+char_fbath,float64,predictor,Number of full bathrooms.,5.3398835905377265e-05,12,house_characteristic
+char_hbath,float64,predictor,Number of half bathrooms.,0.0,8,house_characteristic
+char_frpl,float64,predictor,Number of fireplaces.,0.0053398835905377265,8,house_characteristic
+char_type_resd,category,predictor,Cook County property characteristic.,0.0016019650771613178,5,house_characteristic
+char_cnst_qlty,category,predictor,Cook County property characteristic.,0.00010679767181075453,3,house_characteristic
+char_apts,category,predictor,Cook County property characteristic.,0.0,7,house_characteristic
+char_tp_dsgn,category,predictor,Cook County property characteristic.,0.5248571581139532,2,house_characteristic
+char_attic_fnsh,category,predictor,Cook County property characteristic.,0.001228173225823677,3,house_characteristic
+char_gar1_att,category,predictor,Cook County property characteristic.,0.0011747743899182999,2,house_characteristic
+char_gar1_area,category,predictor,Cook County property characteristic.,0.0012815720617290543,2,house_characteristic
+char_gar1_size,category,predictor,Cook County property characteristic.,0.0001601965077161318,8,house_characteristic
+char_gar1_cnst,category,predictor,Cook County property characteristic.,0.15822075078763284,4,house_characteristic
+char_attic_type,category,predictor,Cook County property characteristic.,5.3398835905377265e-05,3,house_characteristic
+char_bsmt,category,predictor,Cook County property characteristic.,0.00021359534362150906,4,house_characteristic
+char_ext_wall,category,predictor,Cook County property characteristic.,5.3398835905377265e-05,4,house_characteristic
+char_heat,category,predictor,Cook County property characteristic.,0.00037379185133764085,4,house_characteristic
+char_bsmt_fin,category,predictor,Cook County property characteristic.,0.0006407860308645271,3,house_characteristic
+char_roof_cnst,category,predictor,Cook County property characteristic.,5.3398835905377265e-05,6,house_characteristic
+char_class,object,predictor,Cook County property characteristic.,5.3398835905377265e-05,15,house_characteristic
+char_use,category,predictor,Cook County property characteristic.,5.3398835905377265e-05,2,house_characteristic
+char_porch,category,predictor,Cook County property characteristic.,0.0011213755540129225,3,house_characteristic
+char_air,category,predictor,Cook County property characteristic.,5.3398835905377265e-05,2,house_characteristic
+char_ncu,float64,predictor,Cook County property characteristic.,5.3398835905377265e-05,5,house_characteristic
+char_tp_plan,category,predictor,Cook County property characteristic.,0.27639237464623273,2,house_characteristic
+char_land_sf_95_percentile,float64,predictor,Cook County property characteristic.,0.0,310,house_characteristic
+ind_land_gte_95_percentile,bool,predictor,Cook County AVM input feature.,0.0,2,other
+char_bldg_sf_95_percentile,float64,predictor,Cook County property characteristic.,0.0,308,house_characteristic
+ind_bldg_gte_95_percentile,bool,predictor,Cook County AVM input feature.,0.0,2,other
+ind_land_bldg_ratio_gte_10,bool,predictor,Cook County AVM input feature.,0.0,2,other
+loc_chicago_community_area_name,object,predictor,Location or environmental characteristic.,0.5925668820419715,76,location
+loc_env_flood_fema_sfha,object,predictor,Location or environmental characteristic.,0.0016019650771613178,2,location
+loc_env_flood_fs_factor,float64,predictor,Location or environmental characteristic.,0.0036845196774710313,10,location
+loc_env_flood_fs_risk_direction,float64,predictor,Location or environmental characteristic.,0.0036845196774710313,3,location
+loc_env_airport_noise_dnl,float64,predictor,Location or environmental characteristic.,0.0016553639130666951,8817,location
+loc_access_cmap_walk_nta_score,float64,predictor,Location or environmental characteristic.,0.0,279,location
+loc_access_cmap_walk_total_score,float64,predictor,Location or environmental characteristic.,0.0,298,location
+prox_num_pin_in_half_mile,float64,predictor,Proximity or accessibility characteristic.,0.0,3603,proximity
+prox_num_bus_stop_in_half_mile,float64,predictor,Proximity or accessibility characteristic.,0.0,107,proximity
+prox_num_foreclosure_per_1000_pin_past_5_years,float64,predictor,Proximity or accessibility characteristic.,0.0,6422,proximity
+prox_num_school_in_half_mile,float64,predictor,Proximity or accessibility characteristic.,0.001441768569445186,21,proximity
+prox_num_school_with_rating_in_half_mile,float64,predictor,Proximity or accessibility characteristic.,0.001441768569445186,8,proximity
+prox_avg_school_rating_in_half_mile,float64,predictor,Proximity or accessibility characteristic.,0.2576493832434453,64,proximity
+prox_airport_dnl_total,float64,predictor,Proximity or accessibility characteristic.,0.0,14839,proximity
+prox_nearest_bike_trail_dist_ft,float64,predictor,Proximity or accessibility characteristic.,0.0016019650771613178,18465,proximity
+prox_nearest_cemetery_dist_ft,float64,predictor,Proximity or accessibility characteristic.,0.0016019650771613178,18463,proximity
+prox_nearest_cta_route_dist_ft,float64,predictor,Proximity or accessibility characteristic.,0.0,18588,proximity
+prox_nearest_cta_stop_dist_ft,float64,predictor,Proximity or accessibility characteristic.,0.0,18536,proximity
+prox_nearest_golf_course_dist_ft,float64,predictor,Proximity or accessibility characteristic.,0.0046990975596731994,18408,proximity
+prox_nearest_grocery_store_dist_ft,float64,predictor,Proximity or accessibility characteristic.,0.0,18591,proximity
+prox_nearest_hospital_dist_ft,float64,predictor,Proximity or accessibility characteristic.,0.0016019650771613178,18465,proximity
+prox_lake_michigan_dist_ft,float64,predictor,Proximity or accessibility characteristic.,0.0,18536,proximity
+prox_nearest_major_road_dist_ft,float64,predictor,Proximity or accessibility characteristic.,0.0,18556,proximity
+prox_nearest_metra_route_dist_ft,float64,predictor,Proximity or accessibility characteristic.,0.0,18536,proximity
+prox_nearest_metra_stop_dist_ft,float64,predictor,Proximity or accessibility characteristic.,0.0,18536,proximity
+prox_nearest_new_construction_dist_ft,float64,predictor,Proximity or accessibility characteristic.,0.0,18334,proximity
+prox_nearest_park_dist_ft,float64,predictor,Proximity or accessibility characteristic.,0.0016019650771613178,18460,proximity
+prox_nearest_railroad_dist_ft,float64,predictor,Proximity or accessibility characteristic.,0.0016019650771613178,18465,proximity
+prox_nearest_road_arterial_daily_traffic,float64,predictor,Proximity or accessibility characteristic.,0.0020825546003097133,560,proximity
+prox_nearest_road_arterial_dist_ft,float64,predictor,Proximity or accessibility characteristic.,0.0,18598,proximity
+prox_nearest_road_arterial_lanes,float64,predictor,Proximity or accessibility characteristic.,0.0,9,proximity
+prox_nearest_road_arterial_speed_limit,float64,predictor,Proximity or accessibility characteristic.,0.002402947615741977,8,proximity
+prox_nearest_road_arterial_surface_type,object,predictor,Proximity or accessibility characteristic.,0.0,16,proximity
+prox_nearest_road_collector_daily_traffic,float64,predictor,Proximity or accessibility characteristic.,0.006674854488172158,372,proximity
+prox_nearest_road_collector_dist_ft,float64,predictor,Proximity or accessibility characteristic.,0.0,18597,proximity
+prox_nearest_road_collector_lanes,float64,predictor,Proximity or accessibility characteristic.,0.0,6,proximity
+prox_nearest_road_collector_speed_limit,float64,predictor,Proximity or accessibility characteristic.,0.1756287712927858,11,proximity
+prox_nearest_road_collector_surface_type,object,predictor,Proximity or accessibility characteristic.,0.0004271906872430181,18,proximity
+prox_nearest_road_highway_daily_traffic,float64,predictor,Proximity or accessibility characteristic.,0.11838521920222139,856,proximity
+prox_nearest_road_highway_dist_ft,float64,predictor,Proximity or accessibility characteristic.,0.0,18598,proximity
+prox_nearest_road_highway_lanes,float64,predictor,Proximity or accessibility characteristic.,0.0,12,proximity
+prox_nearest_road_highway_speed_limit,float64,predictor,Proximity or accessibility characteristic.,0.43621509051102686,11,proximity
+prox_nearest_road_highway_surface_type,object,predictor,Proximity or accessibility characteristic.,0.0,12,proximity
+prox_nearest_secondary_road_dist_ft,float64,predictor,Proximity or accessibility characteristic.,5.3398835905377265e-05,18545,proximity
+prox_nearest_stadium_dist_ft,float64,predictor,Proximity or accessibility characteristic.,0.0,18536,proximity
+prox_nearest_university_dist_ft,float64,predictor,Proximity or accessibility characteristic.,0.0016019650771613178,18465,proximity
+prox_nearest_vacant_land_dist_ft,float64,predictor,Proximity or accessibility characteristic.,0.0,18563,proximity
+prox_nearest_water_dist_ft,float64,predictor,Proximity or accessibility characteristic.,0.0,18534,proximity
+shp_parcel_centroid_dist_ft_sd,float64,predictor,Parcel geometry characteristic.,0.0,18536,house_characteristic
+shp_parcel_edge_len_ft_sd,float64,predictor,Parcel geometry characteristic.,0.0,18536,house_characteristic
+shp_parcel_interior_angle_sd,float64,predictor,Parcel geometry characteristic.,0.0,18535,house_characteristic
+shp_parcel_mrr_area_ratio,float64,predictor,Parcel geometry characteristic.,0.0,18534,house_characteristic
+shp_parcel_mrr_side_ratio,float64,predictor,Parcel geometry characteristic.,0.0,18536,house_characteristic
+shp_parcel_num_vertices,float64,predictor,Parcel geometry characteristic.,0.0,17,house_characteristic
+acs5_count_sex_total,float64,predictor,American Community Survey 5-year neighborhood characteristic.,0.0,4399,neighborhood
+acs5_percent_age_children,float64,predictor,American Community Survey 5-year neighborhood characteristic.,0.0,7233,neighborhood
+acs5_percent_age_senior,float64,predictor,American Community Survey 5-year neighborhood characteristic.,0.0,7235,neighborhood
+acs5_median_age_total,float64,predictor,American Community Survey 5-year neighborhood characteristic.,0.0002669941795268863,376,neighborhood
+acs5_percent_mobility_no_move,float64,predictor,American Community Survey 5-year neighborhood characteristic.,0.0001601965077161318,7220,neighborhood
+acs5_percent_mobility_moved_in_county,float64,predictor,American Community Survey 5-year neighborhood characteristic.,0.0001601965077161318,7209,neighborhood
+acs5_percent_mobility_moved_from_other_state,float64,predictor,American Community Survey 5-year neighborhood characteristic.,0.0001601965077161318,5274,neighborhood
+acs5_percent_household_family_married,float64,predictor,American Community Survey 5-year neighborhood characteristic.,0.0004271906872430181,7183,neighborhood
+acs5_percent_household_nonfamily_alone,float64,predictor,American Community Survey 5-year neighborhood characteristic.,0.0004271906872430181,7133,neighborhood
+acs5_percent_education_high_school,float64,predictor,American Community Survey 5-year neighborhood characteristic.,0.0004271906872430181,7221,neighborhood
+acs5_percent_education_bachelor,float64,predictor,American Community Survey 5-year neighborhood characteristic.,0.0004271906872430181,7229,neighborhood
+acs5_percent_education_graduate,float64,predictor,American Community Survey 5-year neighborhood characteristic.,0.0004271906872430181,7163,neighborhood
+acs5_percent_income_below_poverty_level,float64,predictor,American Community Survey 5-year neighborhood characteristic.,0.0002669941795268863,7236,neighborhood
+acs5_median_income_household_past_year,float64,predictor,American Community Survey 5-year neighborhood characteristic.,0.0029903348107011268,6623,neighborhood
+acs5_median_income_per_capita_past_year,float64,predictor,American Community Survey 5-year neighborhood characteristic.,0.0001601965077161318,6829,neighborhood
+acs5_percent_income_household_received_snap_past_year,float64,predictor,American Community Survey 5-year neighborhood characteristic.,0.0,6986,neighborhood
+acs5_percent_employment_unemployed,float64,predictor,American Community Survey 5-year neighborhood characteristic.,0.0001601965077161318,7114,neighborhood
+acs5_median_household_total_occupied_year_built,float64,predictor,American Community Survey 5-year neighborhood characteristic.,0.11582207507876328,73,neighborhood
+acs5_median_household_renter_occupied_gross_rent,float64,predictor,American Community Survey 5-year neighborhood characteristic.,0.03481604101030598,1688,neighborhood
+acs5_median_household_owner_occupied_value,float64,predictor,American Community Survey 5-year neighborhood characteristic.,0.00448550221605169,3800,neighborhood
+acs5_percent_household_owner_occupied,float64,predictor,American Community Survey 5-year neighborhood characteristic.,0.0002669941795268863,7191,neighborhood
+acs5_percent_household_total_occupied_w_sel_cond,float64,predictor,American Community Survey 5-year neighborhood characteristic.,0.0,7159,neighborhood
+other_ihs_avg_year_index,float64,predictor,Additional neighborhood or contextual characteristic.,0.0037913173492817856,315,neighborhood
+other_affordability_risk_index,float64,predictor,Additional neighborhood or contextual characteristic.,0.012121535750520638,6,neighborhood
+other_school_district_elementary_avg_rating,float64,predictor,Additional neighborhood or contextual characteristic.,0.0483793453302718,58,neighborhood
+other_school_district_secondary_avg_rating,float64,predictor,Additional neighborhood or contextual characteristic.,0.04293266406792332,28,neighborhood
+ccao_is_corner_lot,bool,predictor,Cook County AVM input feature.,0.0,2,house_characteristic
+time_sale_year,float64,predictor,Year of the sale.,0.0,9,time
+time_sale_month_of_year,int32,predictor,Month of the sale.,0.0,12,time
+time_sale_post_covid,bool,predictor,Indicator for a post-COVID sale period.,0.0,2,time
